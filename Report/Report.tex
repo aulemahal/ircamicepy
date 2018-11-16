@@ -1,0 +1,163 @@
+\documentclass[a4paper,12pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+\usepackage{graphicx}
+% \usepackage[top=2cm,bottom=2cm,left=2.5cm,right=2.5cm]{geometry}
+\usepackage{version}
+\usepackage{amsmath}
+\usepackage{natbib}
+\usepackage{hyperref}
+
+% To do
+% Add a figure about the correction. Scatter plot Ratio vs Theta + fitted function, correction matrix, comparison between raw and corrected and thickness
+% More example of thicknesses, histograms
+% Comparison with and without snow cover (ims, hists)
+
+
+\title{IRcam - Calculation of ice thickness}
+\author{IRcam Group - ArcTrain Floating University}
+\date{\today}
+
+\newcommand{\dg}{$^{\circ}$}
+
+\begin{document}
+
+\maketitle
+
+Sea ice thickness is an important but hard to observe quantity. It is quite easy to measure the sea ice extent and it is not surprising that it is the most used indicator of the arctic sea ice health. However, this is only a part of the picture; the thickness is needed to do a proper analysis of total sea ice volume. Satellite imagery techniques can only go so far, as the atmosphere adds a lot of noise and the electromagnetic frequencies classically used (microwave, infrared and visible) do not penetrate much of the sea ice or the water. Therefore, thin ice is easier to measure. The current project tried to apply the infrared sattelite techniques to thermal data taken onboard the ship. Also, one goal was to test the method in the perspective of the planned "MOSAIC" drift expedition where it could be used in a more systematic way.
+
+\section{Setup}
+To make shipborne observations of the sea surface and sea ice, the IR camera was installed on the "Peil" deck of the FS Polarstern, approximately 26 m from the surface. Attached to the fence on the portside, the camera was pointed downward in order to be as perpendicular as it could to the water surface. This location was chosen as the setup was not blocking any passages or emergency exits, but also because it allowed for the steepest imaging angles. Two different imaging angles were tested in this configuration : 30\dg  and 40\dg  from the horizontal. 
+
+
+The VarioCam HD camera was solidly fixed on a tripod and connected by an Ethernet cable to a mini PC which was protected in a waterproof box that also stored the two large car batteries providing the needed energy. The mini PC was accessed wirelessly from another laptop computer to start, stop and transfer recordings. The IRIBIS 3 plus software was used to control the camera and previsualize the data, but most of the post-processing was done in Python using exported text files instead of the proprietary binary format.
+
+
+In the first outdoor trials, data from the camera showed strange jumps and drifts in temperature. With the help of land-based specialists, we pinpointed the internal Non Uniformity Correction (NUC) as the culprit for those errors. A few experiments later, it was found that unsychroninzing the NUC with the image capturing solved the problem. However, all this troubleshooting only left us time to capture one full valid sequence, during the night of September 23rd.
+
+\section{Correction and post-processing of the images}
+When imaging outside, the received irradiance is highly dependent on both the imaging angle and the downwelling radiation. The brightness temperature seen by the camera is that of a gray body rather than a black one since the emissivity of saline water and sea ice is not 1. Moreover, according to the Fresnel equations, the emissivity varies with the incidence angle, decreasing rapidly for large angles. Reflection from downwelling radiation is more complex to correct since it depends on the cloud cover and the sun's position, thus also changing in time. 
+
+
+After failing to do a theoritical correction, we chose to use some assumptions on the sea surface temperature and compute empirical correction matrices. The principle of the simple correction is the following: knowing the incidence angle of the rays hitting each pixel ($\theta(x, y)$), we use an image of the measured sea surface temperature ($T_{meas}(x,y)$) and assume it is uniform in reality (i.e. $T_{real}(x,y) = T_{ref}$). The ratio of the supposed uniform temperature on the measured temperature of all pixels is compared with the incidence angle and a fitting function $F(\theta)$ is found: 
+\begin{align}
+\frac{T_{ref}}{T_{meas}(x, y)} \approx F\left(\theta\right)
+\end{align}
+Polynomials of the third order were used as fitting functions for this project. Finally, a correction matrix $\epsilon(x,y)$ is computed from the fit and the incidence angles to be used with all other frames with the same imaging angle and downwelling radiation situation by simply calculating:
+\begin{align}
+T_{corr} = \epsilon T_{meas}
+\end{align}
+In most cases, $T_{meas}$ was a mean of many similar images in order to get rid of the perturbations made by noise and surface waves. $T_{ref}$ was also found by taking the mean of the pixels of $T_{meas}$ with the lowest incidence angles. This correction and its generation was implemented in python.
+
+
+\section{Sea Ice}
+With the infrared camera the temperature of the surface of sea ice is measured. The surface temperature depends on the sum of fluxes inside the ice pack. Most of these fluxes can be computed from air and water measurements, allowing to compute the ice thickeness
+
+Assuming thermodynamic equilibrium, the sum of fluxes is 
+\begin{equation} \label{eq:fluxes}
+    (F_{lu}+F_s+F_e+F_{sdn}+F_{ldn})+F_c=F_t+F_c=0
+\end{equation}
+where $F_{lu}$ is the upward longwave radiation, $F_s$ is the sensible heat flux, $F_e$ the latent heat flux, $F_{snd}$ the absorbed shortwave radiation, $F_{ldn}$ the downward longwave radiation, and $F_c$ the conductive heat flux the ice and snow. $F_c$ depends on ice thickness with the relationship :
+\begin{equation} \label{eq:F_c}
+    F_c=\frac{k_ik_s}{k_sh_i+k_ih_s} (T_w-T_s) 
+\end{equation}
+with $k_s$ and $k_i$ the snow and ice conductivity, $T_s$ the surface temperature, and $T_w$ the water temperature.
+
+To compute the ice thickness, we need to measure the ocean temperature $T_w$, the downward longwave radiation $F_{ldn}$, the downward shortwave radiation $F_{sdn}$, the snow thickness $h_s$, the air temperature $T_a$, the relative humidity $f$, and the wind velocity $u$. We use the following fluxes computation, with the constants and parameters in Table \ref{tab:param_const}.
+\begin{align}
+    \intertext{The upward longwave flux is computed using Stefan-Boltzmann law :}
+    F_{lu} &= - \varepsilon \cdot \sigma \cdot T_s^4 \\% Longwave radiation up [W]
+    \intertext{The sensible and latent heat flux are computed using }
+    F_s &= \rho_a \cdot c_p \cdot C_s \cdot u \cdot (T_a - T_s) \\ % Turbulent sensible heat flux [W]
+    F_e &= \rho_a \cdot L \cdot C_e \cdot u \cdot (f \cdot e_{sa} - e_{s0})\\ % Latent heat flux [W]
+    \intertext{where $e_{sa}$ and $e_{s0}$ are calculated using the following empirical law}
+    e_s(T)&=a \cdot T^4 + b \cdot T^3 + c \cdot T^2 + d \cdot T + e \\
+    e_{sa} &= e_s(T_a)\\ % Saturation vapor pressure in the air [mbar]
+    e_{s0} &= e_s(T_s)\\ % Saturation vapor pressure at the surface [mbar]
+    a &= 2.7798202\cdot 10^{-6},~b = -2.6913393\cdot 10^{-3}\\
+    c &= 0.97920849,~d = -158.63779,~e = 9653.1925 \\
+    \intertext{We compute the absorbed shortwave radiation with the albedo. However, as we don't have a good way to compute it, we use an estimate of $\alpha = 0.8$, a value inspired by Mäkynen et al. (2013). As the experiments where done with very large sun zenith angles, we also neglect the transmission through ice and snow.}
+    F_{sdn} &= (1 - \alpha)\Phi_{sdn}  \\% Absorbed shortwave radiation [W]
+    \intertext{For the absorbed longwave radiation, we use the cloud's brightness temperature $T_{atm}$, the cloud coverage $C$ and the following atmospheric emissivity parametrization:}
+    \varepsilon^* &= 0.7855\left(1 + 0.2232 C^{2.75}\right)\\
+    F_{ldn} &= \varepsilon^*\sigma T_{atm}^4
+    \intertext{We consider that all the downwelling longwave radiation is absorbed. Also, if $T_{atm}$ cannot be measured, the 10-m air temperature $T_a$ can be used. The conductivity of sea ice is estimated as :}
+    k_i &= k_0 + \frac{\beta \cdot S_i }{(T_i - 273)} \\ % Heat conductivity of sea ice (Yu and Rothrock 1996 (2.034 in Maykut 1982)
+    \intertext{From equation \ref{eq:fluxes} and \ref{eq:F_c}, we can now compute an estimated ice thickness}
+    F_c &= -F_t \\
+    h_i &= k_i \cdot \left(\frac{(T_s - T_w) }{F_t} - \frac{h_s }{k_s} \right) % Ice Thickness [m]
+\end{align}
+
+Snow thickness is a quantity hard to observe and measure precisely. We had two ways to estimate its value in our algorithm, visual estimation or parametrization. The visual estimation were either done from the pictures of the camera, other pictures taken at the same time with a personal camera or from the ice watch data provided by the ArcTrain students, at a approximately hourly rate. The parametrization is the one from Doronin (1971) used by Yu and Rothrock (1996) and gives a piecewise linear relationship between snow and ice thickness:
+\begin{align}
+h_s = \left\{\begin{matrix}
+0,       & h_i < 0.05           \\
+0.05h_i, & 0.05 \le h_i \le 0.2 \\
+0.1h_i,  & h_i > 0.2            \\ 
+\end{matrix}\right.
+\end{align}
+
+As seen on table~\ref{tab:param_vars}, most measurements were taken from the centralized ship database DShip or from Pinocchio.
+
+\begin{table}[h]
+    \caption{\em Parameters and constants}\vspace{5pt}
+    \label{tab:param_const}
+    \centering
+    \begin{tabular}{llll}
+        % \hline
+        Parameter     & Value                 & Units            & Description                             \\
+        \hline                                                                                               
+        $\sigma$      &  $5.67\cdot 10^{-8}$  & $W\,/\,m^2\,K^4$ & Stefan-Boltzman constant                \\
+        $\varepsilon$ &  0.95                 &                  & Emissivity of ice and snow              \\
+        $k_s$         &  0.3                  & $W\,/\,m\,K$     & Heat conductivity snow                  \\
+        $\rho_a$      &  1.03                 & $kg\,/\,m^3$     & air density                             \\
+        $c_p$         &  $1.0044\cdot 10^{3}$ & $J\,/\,kg\,m^3$  & Specific heat of the air                \\
+        $C_s$         &  0.003                &                  & Bulk transfer coefficients for heat     \\
+        $L$           &  $2.49\cdot 10^{6}$   & $J\,/\,kg$       & Latent heat of vaporization             \\
+        $C_e$         &  0.003                &                  & Evaporation bulk transfer coefficients  \\
+        $\beta$       &  0.13                 & $W\,/\,m^2\,kg$  & salinity parameter                      \\
+        $k_0$         &  2.034                & $W\,/\,m\,K$     & Heat conductivity pure ice              \\
+        $S_i$         &  7.7                  &                  & Bulk salinity of ice                    \\ 
+        $\alpha$      &  0.8                  &                  & Albedo of sea ice.                      \\
+        \hline
+    \end{tabular}
+\end{table}
+
+\begin{table}[h]
+    \caption{\em Variables and measurements}\vspace{5pt}
+    \label{tab:param_vars}
+    \centering
+    \begin{tabular}{llll}
+        % \hline
+        Variable      & Units       & Description                             & Data Source\\
+        \hline                                                                                              
+		$T_s$         & $K$         & Surface temperature (ice or snow)       & IR camera  \\
+		$T_a$         & $K$         & Air temperature (25 m)                  & DShip      \\
+		$T_w$         & $K$         & Water temperature                       & DShip      \\
+		$h_s$         & $m$         & Snow thickness                          & Estimation \\
+		$u$           & $m\,/\,s$   & Wind speed (25 m)                       & DShip      \\ 
+		$f$           &             & Relative humidity                       & DShip      \\
+		$\Phi_{sdn}$  & $W\,/\,m^2$ & Downwelling short wave radiation        & DShip      \\
+		$T_{atm}$     & $K$         & Cloud brightness temperature            & Pinocchio  \\
+		$C$           &             & Cloud coverage                          & Pinocchio  \\
+        \hline
+    \end{tabular}
+	\begin{flushleft}
+	\emph{DShip} is the ship's centralized data system and \emph{Pinocchio} is the onboard upward looking infrared camera.
+	\end{flushleft}
+\end{table}
+
+\section{Results and discussion}
+
+
+%\begin{figure}
+%\centering
+%\includegraphics[width=\linewidth]{Temp_Thickness_1809231030.pdf}\\
+%\includegraphics[width=\linewidth]{Temp_Thickness_1809231030_distributions.pdf}\\
+%\includegraphics[width=\linewidth]{Temp_Thickness_1809231235.pdf}
+%\caption{Two examples of the brightness temperature images and the ice thicknesses found with our algorithm. The thickness values are most likely too low. The middle figures show the temperatures and thicknesses distributions for the top images. Images were reprojected to a cartesian grid (top-down view).}
+%\end{figure}
+
+
+
+\end{document}
